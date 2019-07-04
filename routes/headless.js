@@ -3,7 +3,7 @@ var router = express.Router();
 var puppeteer = require("puppeteer"); // <-- process.cwd() instead of normal require
 
 async function ssr(url) {
-    var browser = await puppeteer.launch({headless: true});
+    var browser = await puppeteer.launch({args: ['--headless', '--no-sandbox', '--disable-setuid-sandbox']});
     var page = await browser.newPage();
 
     var html = "";
