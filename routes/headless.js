@@ -1,11 +1,14 @@
 var express = require('express');
 var router = express.Router();
 var puppeteer = require("puppeteer"); // <-- process.cwd() instead of normal require
+var browser = "";
 
 async function ssr(url) {
-    var browser = await puppeteer.launch({args: ['--headless', '--no-sandbox', '--disable-setuid-sandbox']});
-    var page = await browser.newPage();
 
+    if (browser === "")
+        browser = await puppeteer.launch({args: ['--headless', '--no-sandbox', '--disable-setuid-sandbox']});
+
+    var page = await browser.newPage();
     var html = "";
 
     try {
@@ -17,7 +20,6 @@ async function ssr(url) {
     }
 
     await page.close();
-    await browser.close();
     return html;
 }
 
