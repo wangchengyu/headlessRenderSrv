@@ -1,16 +1,23 @@
 var express = require('express');
 var router = express.Router();
 var puppeteer = require("puppeteer"); // <-- process.cwd() instead of normal require
-var browser = "";
 
 async function ssr(url) {
-    if (typeof browser == "string")
-        browser = await puppeteer.launch({headless: true});
-
+    var browser = await puppeteer.launch({headless: true});
     var page = await browser.newPage();
-    await page.goto(url, {waitUntil: 'networkidle0'});
-    const html = await page.content(); // 页面的html内容
+
+    var html = "";
+
+    try {
+        await page.goto(url, {waitUntil: 'networkidle0', timeout: 10* 1000});
+        html = await page.content(); // 页面的html内容
+    } catch (e) {
+        console.log(e);
+        html = "Server Error";
+    }
+
     await page.close();
+    await browser.close();
     return html;
 }
 
