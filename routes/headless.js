@@ -6,7 +6,7 @@ var browser = "";
 async function ssr(url) {
 
     if (browser === "")
-        browser = await puppeteer.launch({args: ['--headless', '--no-sandbox', '--disable-setuid-sandbox']});
+        browser = await puppeteer.launch({headless: true});
 
     var page = await browser.newPage();
     var html = "";
@@ -23,14 +23,26 @@ async function ssr(url) {
     return html;
 }
 
+function loadCacheFile(url) {
+    return html;
+}
+
+function saveCacheFile(url, html) {
+
+}
+
 /* GET headless listing. */
 router.get('/', function(req, res, next) {
     var url = req.query.url;
     var html = ssr(url);
 
-    html.then(function(value) {
+    if (typeof html == "string")
         res.send(value);
-    });
+    else
+
+        html.then(function(value) {
+            res.send(value);
+        });
 });
 
 module.exports = router;
