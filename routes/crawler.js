@@ -71,7 +71,7 @@ router.get('/', async function(req, res, next) {
         // //*[@id="plist"]/dt/a
         var p = await loadPage(url);
 
-        if (typeof dlPage == "string") {
+        if (typeof p == "string") {
             console.log("!!!!!!!load page fail .... retry");
             continue;
         }
@@ -129,7 +129,7 @@ router.get('/', async function(req, res, next) {
                 }
             });
 
-            exec("wget -O \"./dl/" + bookName + "-" + bookId + ".rar\" " + dlUrl);
+            await exec("wget -O \"./dl/" + bookName + "-" + bookId + ".rar\" " + dlUrl);
 
             // html += "<tr>"
             //     + "<td>" + bookId + "</td>"
@@ -156,6 +156,44 @@ router.get('/', async function(req, res, next) {
     //     html.then(function(value) {
     //         res.send(value);
     //     });
+});
+
+router.get('/buildscprit', async function (req, res, next) {
+    var sortId = req.query.sortid;
+
+    var mysql = require("mysql");
+    var conn = mysql.createConnection({
+        host     : 'localhost',
+        user     : 'root',
+        password : 'mysql0411',
+        database : 'crawler_data'
+    });
+
+    conn.connect();
+
+    let list = await (function () {
+        return new Promise(function(resolve, reject) {
+            conn.query("select * from zxcs_books where sort_id = " + sortId, function (err, result) {
+
+                if (err) {
+                    console.log('[INSERT ERROR] - ', err.message);
+                    res.send("500 error");
+                    resolve();
+                }
+                var list = '';
+                for (var i = 0; i < result.length; i++) {
+                    var e = result[i];
+                    list += "wget -O \"./dl_" + sortId + "/" + e.name + "-" + e.book_id + ".rar\" \"" + e.rar_url + "\"\n";
+                }
+
+                resolve(list);
+            })
+        })
+    })();
+
+    res.send(list);
+
+
 });
 
 module.exports = router;
