@@ -17,7 +17,7 @@ async function loadPage(url) {
 
     try {
         console.log("=== start to load page >> " + url + " ... ");
-        await page.goto(url, {waitUntil: 'networkidle0', timeout: 30 * 1000});
+        await page.goto(url, {waitUntil: 'domcontentloaded', timeout: 30 * 1000});
         console.log("=== loaded page >> " + url + " << done!")
     } catch (e) {
         await page.close();
@@ -28,7 +28,16 @@ async function loadPage(url) {
     return page;
 }
 
+async function getSortId(bookId) {
+    
+    var page = await loadPage("http://www.zxcs.me/post/" + bookId);
+    var aHandler = await page.$("#content > p.date > a:nth-child(2)");
+    //console.log("aHandler: ", aHandler);
+    var sort_code = (await page.evaluate(e => e.href, aHandler)).match(/\d+/)[0];
+    page.close();
 
+    return sort_code;
+}
 
 /* GET headless listing. */
 router.get('/', async function(req, res, next) {
@@ -195,5 +204,169 @@ router.get('/buildscprit', async function (req, res, next) {
 
 
 });
+
+router.get('/getrecent', async function (req, res, next) {
+    var mysql = require("mysql");
+    var conn = mysql.createConnection({
+        host     : 'localhost',
+        user     : 'root',
+        password : 'mysql0411',
+        database : 'crawler_data'
+    });
+
+    var crawler_url = 'http://www.zxcs.me/map.html';
+    var p = await loadPage(crawler_url);
+    
+    //get title list
+    var a = await p.$$("#content ul li a");
+
+    if (!a.length) 
+        return res.send("empty");
+
+    var book_list = [];
+    var html = "";
+
+    for (var i = 0; i < a.length; i++) {
+        //e is an object
+        var e = a[i];
+
+        var bookMainUrl = await p.evaluate(ele => ele.href, e);
+        var text = await p.evaluate(ele => ele.text, e);
+
+        var bookName = text.replace("《", "").match(/[\WA-Za-z0-9_]+(?=》)/)[0];
+        var bookId = bookMainUrl.match(/\d+/)[0];
+        var dlPageUrl = 'http://www.zxcs.me/download.php?id=' + bookId;
+
+        var dlPage = await loadPage(dlPageUrl);
+
+        var status = 0;
+        if (typeof dlPage == "string") {
+            //try again
+            dlPage = await loadPage(dlPageUrl);
+            if (typeof dlPage == "string") {
+                status = -1;
+            }
+        }
+
+        var dlUrl = "";
+
+        if (status === 0) { //the page is loaded!
+            var dlUrlHandler = await dlPage.$("span.downfile > a");
+            dlUrl = await dlPage.evaluate(ele => ele.href, dlUrlHandler);
+
+            await dlPage.close();
+        }
+
+        var sortId = await getSortId(bookId);
+
+        book_list.push({
+            text,
+            bookName,
+            bookMainUrl,
+            bookId,
+            dlPageUrl,
+            dlUrl,
+            sortId,
+            status
+        });
+
+        console.log(text, bookName, bookMainUrl, bookId, dlPageUrl, dlUrl);
+        console.log("--------------------------");
+
+        var sql = 'INSERT INTO `crawler_data`.`zxcs_books` (`name`, `book_id`, `status`, `page_url`, `rar_url`, `full_text`, `sort_id`) VALUES(?,?,?,?,?,?,?)';
+        var params = [bookName, bookId, status, bookMainUrl, dlUrl, text, sortId];
+
+        conn.query(sql, params, function (err, result) {
+            if (err) {
+                console.log('[INSERT ERROR] - ', err.message);
+                return;
+            }
+        });
+
+        var wget_script = "wget -O \"./dl_recent/" + bookName + "-" + bookId + ".rar\" " + dlUrl;
+        //await exec(wget_script);
+
+        html +=
+         "<tr>"
+            + "<td>" + bookId + "</td>"
+            + "<td>" +sortId + "</td>"
+            + "<td>" + bookName + "</td>"
+            + "<td>" + text + "</td>"
+            + "<td>" + dlUrl + "</td>"
+            + "<td>" + wget_script + "</td>"
+            + "</tr>";
+    }
+
+    res.send(html);
+    
+    // a.forEach(async e => { //e a标签对象
+    //     var bookMainUrl = await p.evaluate(ele => ele.href, e);
+    //     var text = await p.evaluate(ele => ele.text, e);
+
+    //     var bookName = text.replace("《", "").match(/[\WA-Za-z0-9_]+(?=》)/)[0];
+    //     var bookId = bookMainUrl.match(/\d+/)[0];
+    //     var dlPageUrl = 'http://www.zxcs.me/download.php?id=' + bookId;
+
+    //     var dlPage = await loadPage(dlPageUrl);
+
+    //     var status = 0;
+    //     if (typeof dlPage == "string") {
+    //         //try again
+    //         dlPage = await loadPage(dlPageUrl);
+    //         if (typeof dlPage == "string") {
+    //             status = -1;
+    //         }
+    //     }
+
+    //     var dlUrl = "";
+
+    //     if (status === 0) {
+    //         var dlUrlHandler = await dlPage.$("span.downfile > a");
+    //         dlUrl = await dlPage.evaluate(ele => ele.href, dlUrlHandler);
+
+    //         await dlPage.close();
+    //     }
+
+    //     book_list.push({
+    //         text,
+    //         bookName,
+    //         bookMainUrl,
+    //         bookId,
+    //         dlPageUrl,
+    //         dlUrl,
+    //         status
+    //     });
+
+    //     console.log(text, bookName, bookMainUrl, bookId, dlPageUrl, dlUrl);
+    //     console.log("--------------------------");
+
+    //     var sql = 'INSERT INTO `crawler_data`.`zxcs_books` (`name`, `book_id`, `status`, `page_url`, `rar_url`, `full_text`) VALUES(?,?,?,?,?,?)';
+    //     var params = [bookName, bookId, status, bookMainUrl, dlUrl, text];
+
+    //     conn.query(sql, params, function (err, result) {
+    //         if (err) {
+    //             console.log('[INSERT ERROR] - ', err.message);
+    //             return;
+    //         }
+    //     });
+
+    //     var wget_script = "wget -O \"./dl_recent/" + bookName + "-" + bookId + ".rar\" " + dlUrl;
+    //     //await exec(wget_script);
+
+    //     html += "<tr>"
+    //         + "<td>" + bookId + "</td>"
+    //         + "<td>" + bookName + "</td>"
+    //         + "<td>" + text + "</td>"
+    //         + "<td>" + dlUrl + "</td>"
+    //         + "<td>" + wget_script + "</td>"
+    //         + "</tr>";
+
+    // }); 
+    
+
+    
+    
+});
+
 
 module.exports = router;
